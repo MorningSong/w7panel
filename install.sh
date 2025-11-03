@@ -587,6 +587,7 @@ checkMultipathAndBlacklist() {
     local config_content=$(cat << 'EOF'
 blacklist {
     devnode "^sd[a-z0-9]+"
+    devnode "^vd[a-z0-9]+"
 }
 EOF
     )
@@ -645,12 +646,12 @@ handleSELinux() {
 # 检测并处理防火墙状态
 handleFirewall() {
     # 定义常见的防火墙服务
-    local firewalld_services=("firewalld" "ufw" "iptables" "firewalld.service" "ufw.service")
+    local firewalld_services="firewalld ufw iptables firewalld.service ufw.service"
     local firewall_active=false
     local service_name=""
     
     # 检测是否有活跃的防火墙服务
-    for service in "${firewalld_services[@]}"; do
+    for service in $firewalld_services; do
         if command -v systemctl >/dev/null 2>&1; then
             if systemctl is-active --quiet "$service"; then
                 firewall_active=true
