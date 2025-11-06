@@ -7,7 +7,7 @@ metadata:
   labels:
     app: longhorn-iscsi-installation
   annotations:
-    command: &cmd OS=$(grep -E "^ID_LIKE=" /etc/os-release | cut -d '=' -f 2); if [[ -z "${OS}" ]]; then OS=$(grep -E "^ID=" /etc/os-release | cut -d '=' -f 2); fi; if [[ "${OS}" == *"debian"* ]]; then sudo apt-get update -q -y && sudo apt-get install -q -y open-iscsi && sudo systemctl -q enable iscsid && sudo systemctl start iscsid && sudo modprobe iscsi_tcp; elif [[ "${OS}" == *"suse"* ]]; then sudo zypper --gpg-auto-import-keys -q refresh && sudo zypper --gpg-auto-import-keys -q install -y open-iscsi && sudo systemctl -q enable iscsid && sudo systemctl start iscsid && sudo modprobe iscsi_tcp; else sudo yum makecache -q -y && sudo yum --setopt=tsflags=noscripts install -q -y iscsi-initiator-utils && echo "InitiatorName=$(/sbin/iscsi-iname)" > /etc/iscsi/initiatorname.iscsi && sudo systemctl -q enable iscsid && sudo systemctl start iscsid && sudo modprobe iscsi_tcp; fi && if [ $? -eq 0 ]; then echo "iscsi install successfully"; else echo "iscsi install failed error code $?"; fi
+    command: &cmd OS=$(grep -E "^ID_LIKE=" /etc/os-release | cut -d '=' -f 2); if [[ -z "${OS}" ]]; then OS=$(grep -E "^ID=" /etc/os-release | cut -d '=' -f 2); fi; if [[ "${OS}" == *"debian"* ]]; then sudo apt-get update -q -y && sudo apt-get install -q -y cryptsetup open-iscsi && sudo modprobe iscsi_tcp && sudo systemctl -q enable iscsid && sudo systemctl restart iscsid; elif [[ "${OS}" == *"suse"* ]]; then sudo zypper --gpg-auto-import-keys -q refresh && sudo zypper --gpg-auto-import-keys -q install -y cryptsetup open-iscsi && sudo modprobe iscsi_tcp && sudo systemctl -q enable iscsid && sudo systemctl restart iscsid; else sudo yum makecache -q -y && sudo yum --setopt=tsflags=noscripts install -q -y cryptsetup iscsi-initiator-utils && echo "InitiatorName=$(/sbin/iscsi-iname)" > /etc/iscsi/initiatorname.iscsi && sudo modprobe iscsi_tcp && sudo systemctl -q enable iscsid && sudo systemctl restart iscsid; fi && if [ $? -eq 0 ]; then echo "iscsi install successfully"; else echo "iscsi install failed error code $?"; fi
 spec:
   selector:
     matchLabels:
@@ -33,7 +33,7 @@ spec:
           privileged: true
       containers:
       - name: sleep
-        image: registry.cn-hangzhou.aliyuncs.com/rancher/mirrored-pause:3.6
+        image: rancher/mirrored-pause:3.6
   updateStrategy:
     type: RollingUpdate
 ---
@@ -45,7 +45,7 @@ metadata:
   labels:
     app: longhorn-nfs-installation
   annotations:
-    command: &cmd OS=$(grep -E "^ID_LIKE=" /etc/os-release | cut -d '=' -f 2); if [[ -z "${OS}" ]]; then OS=$(grep -E "^ID=" /etc/os-release | cut -d '=' -f 2); fi; echo "Detected OS ${OS}"; if [[ "${OS}" == *"debian"* ]]; then sudo apt-get update -q -y && sudo apt-get install -q -y nfs-common && if [ $? -eq 0 ]; then echo "NFS install successfully"; else echo "NFS install failed error code $?"; fi; elif [[ "${OS}" == *"suse"* ]]; then sudo zypper --gpg-auto-import-keys -q refresh && sudo zypper --gpg-auto-import-keys -q install -y nfs-client && if [ $? -eq 0 ]; then echo "NFS install successfully"; else echo "NFS install failed error code $?"; fi; elif [[ "${OS}" == *"centos"* || "${OS}" == *"rhel"* ]]; then sudo yum makecache -q -y && sudo yum --setopt=tsflags=noscripts install -q -y nfs-utils && if [ $? -eq 0 ]; then echo "NFS install successfully"; else echo "NFS install failed error code $?"; fi; else echo "Unrecognized OS, unable to install NFS client."; fi
+    command: &cmd OS=$(grep -E "^ID_LIKE=" /etc/os-release | cut -d '=' -f 2); if [[ -z "${OS}" ]]; then OS=$(grep -E "^ID=" /etc/os-release | cut -d '=' -f 2); fi; if [[ "${OS}" == *"debian"* ]]; then sudo apt-get update -q -y && sudo apt-get install -q -y nfs-common && sudo systemctl -q enable rpcbind && sudo systemctl restart rpcbind; elif [[ "${OS}" == *"suse"* ]]; then sudo zypper --gpg-auto-import-keys -q refresh && sudo zypper --gpg-auto-import-keys -q install -y nfs-client && sudo systemctl -q enable rpcbind && sudo systemctl restart rpcbind; else sudo yum makecache -q -y && sudo yum --setopt=tsflags=noscripts install -q -y nfs-utils && sudo systemctl -q enable rpcbind && sudo systemctl restart rpcbind; fi && if [ $? -eq 0 ]; then echo "nfs client install successfully"; else echo "nfs client install failed error code $?"; fi
 spec:
   selector:
     matchLabels:
@@ -71,7 +71,7 @@ spec:
           privileged: true
       containers:
       - name: sleep
-        image: registry.cn-hangzhou.aliyuncs.com/rancher/mirrored-pause:3.6
+        image: rancher/mirrored-pause:3.6
   updateStrategy:
     type: RollingUpdate
 ---
@@ -81,8 +81,8 @@ metadata:
   name: longhorn
   namespace: kube-system
 spec:
-  chart: https://cdn.w7.cc/w7panel/charts/longhorn-1.7.2.tgz
-  version: v1.7.2
+  chart: https://cdn.w7.cc/w7panel/charts/longhorn-1.10.0.tgz
+  version: v1.10.0
   targetNamespace: longhorn-system
   createNamespace: true
   set:
@@ -92,3 +92,4 @@ spec:
     csi.resizerReplicaCount: 1
     csi.snapshotterReplicaCount: 1
     defaultSettings.storageReservedPercentageForDefaultDisk: "0"
+    defaultSettings.createDefaultDiskLabeledNodes: "true"
