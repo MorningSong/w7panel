@@ -150,9 +150,6 @@ downloadResource() {
         https://cdn.w7.cc/w7panel/manifests/higress.yaml
         https://cdn.w7.cc/w7panel/manifests/longhorn.yaml
         https://cdn.w7.cc/w7panel/manifests/w7panel-offline.yaml
-        https://cdn.w7.cc/w7panel/etc/registries.yaml
-        https://cdn.w7.cc/w7panel/etc/sysctl.d/k3s.conf
-        https://cdn.w7.cc/w7panel/etc/systemd/k3s.service.env
     "
 
     for resource in $resources; do
@@ -190,6 +187,9 @@ internalIP() {
 
 # 处理sysctl配置
 etcSysctl() {
+    # 下载资源文件
+    download_files "https://cdn.w7.cc/w7panel/etc/sysctl.d/k3s.conf"
+    
     if command -v sysctl &> /dev/null; then
         local ETC_PATH="/etc/sysctl.d"
         sudo mkdir -p "$ETC_PATH" || {
@@ -209,6 +209,9 @@ etcSysctl() {
 
 # 处理私有仓库配置
 etcPrivaterRegistry() {
+    # 下载资源文件
+    download_files "https://cdn.w7.cc/w7panel/etc/registries.yaml"
+    
     local ETC_PATH="/etc/rancher/k3s/"
     sudo mkdir -p "$ETC_PATH" || {
         fatal "Failed to create directory: $ETC_PATH"
@@ -222,10 +225,24 @@ etcPrivaterRegistry() {
 
 # 处理systemd配置
 etcSystemd() {
+    # 下载资源文件
+    download_files "https://cdn.w7.cc/w7panel/etc/systemd/k3s.service.env"
+    
+    if systemctl is-active --quiet k3s; then
+        local service_name="k3s"
+        local env_file="k3s.service.env"
+    else
+        local service_name="k3s-agent"
+        local env_file="k3s-agent.service.env"
+    fi
+
     local ETC_PATH="/etc/systemd/system/"
-    if [ -f "./w7panel/etc/systemd/k3s.service.env" ]; then
-        cat "./w7panel/etc/systemd/k3s.service.env" | sudo tee -a "$ETC_PATH/k3s.service.env" > /dev/null || {
-            fatal "Failed to append content to $ETC_PATH/k3s.service.env"
+    local source_env="./w7panel/etc/systemd/k3s.service.env"
+
+    # 处理环境变量文件
+    if [ -f "$source_env" ]; then
+        cat "$source_env" | sudo tee -a "${ETC_PATH}/${env_file}" > /dev/null || {
+            fatal "Failed to append content to ${ETC_PATH}/${env_file}"
         }
     fi
 
@@ -234,19 +251,27 @@ etcSystemd() {
         fatal "Failed to reload systemd manager configuration"
     }
 
-    # 重启 k3s.service
-    sudo systemctl restart k3s.service || {
-        fatal "Failed to restart k3s.service"
+    # 重启对应类型的服务
+    sudo systemctl restart "${service_name}.service" || {
+        fatal "Failed to restart ${service_name}.service"
     }
-    info "k3s.service has been restarted successfully."
+    info "${service_name}.service has been restarted successfully."
 }
 
 # 检查K3S是否已安装
 checkK3SInstalled() {
     info 'start check server is installed 检测k3s是否已安装'
-    if [ -x /usr/local/bin/k3s ]; then
-        warn "K3s has been installed , Please execute /usr/local/bin/k3s-uninstall.sh to uninstall k3s "
-        warn "K3s 已安装 , 请先执行　/usr/local/bin/k3s-uninstall.sh 命令卸载 "
+    if [ -x "/usr/local/bin/k3s" ]; then
+        if systemctl is-active --quiet k3s; then
+            local type="Server"
+            local uninstall="/usr/local/bin/k3s-uninstall.sh"
+        else
+            local type="Agent"
+            local uninstall="/usr/local/bin/k3s-agent-uninstall.sh"
+        fi
+        
+        warn "K3s $type has been installed , Please execute $uninstall to uninstall k3s "
+        warn "K3s $type 已安装 , 请先执行 $uninstall 命令卸载 "
         exit
     fi
 }
@@ -306,6 +331,13 @@ k3sInstall() {
         --disable-network-policy \
         --disable-kube-proxy \
         --disable "local-storage,traefik"
+}
+
+k3sInstallAgent() {
+   info "current server's public network ip: $(publicNetworkIp)"
+   curl -sfL https://rancher-mirror.rancher.cn/k3s/k3s-install.sh | \
+   K3S_URL=${K3S_URL} K3S_TOKEN=${K3S_TOKEN} INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true INSTALL_K3S_MIRROR=cn INSTALL_K3S_MIRROR_URL=rancher-mirror.cdn.w7.cc \
+   sh -s - --node-label "w7.public-ip=$(publicNetworkIp)"
 }
 
 # 启动服务管理
@@ -715,33 +747,36 @@ checkDependencies() {
 # 主执行函数
 main() {
     process_args "$@"
-
+    
     checkDependencies
     handleSELinux
     handleFirewall
     checkK3SInstalled
-    downloadResource
-
+    
     etcSysctl
     etcPrivaterRegistry
-
     setupZram
     checkMultipathAndBlacklist
-    
-    k3sInstall
-    importImages
-    installHelmCharts
-    etcSystemd
-    checkW7panelInstalled
 
-    tips "=================================================================="
-    tips "公网地址: http://$(publicNetworkIp):9090"
-    tips "内网地址: http://$(internalIP):9090"
-    tips "微擎面板安装成功，请访问后台设置登录密码！"
-    tips ""
-    warn "如果您的面板无访问："
-    warn "请确认服务器安全组是否放通 (80|443|6443|9090) 端口"
-    tips "=================================================================="
+    if [ -n "$K3S_URL" ]; then
+        k3sInstallAgent
+    else
+        k3sInstall
+        downloadResource
+        importImages
+        installHelmCharts
+        etcSystemd
+        checkW7panelInstalled
+    
+        tips "=================================================================="
+        tips "公网地址: http://$(publicNetworkIp):9090"
+        tips "内网地址: http://$(internalIP):9090"
+        tips "微擎面板安装成功，请访问后台设置登录密码！"
+        tips ""
+        warn "如果您的面板无访问："
+        warn "请确认服务器安全组是否放通 (80|443|6443|9090) 端口"
+        tips "=================================================================="
+    fi
 }
 
 main "$@"
