@@ -760,17 +760,21 @@ main() {
     checkMultipathAndBlacklist
 
     if [ -n "$K3S_URL" ]; then
-        if [[ -z "$K3S_NODE_NAME" ]]; then
+        if [ -z "$K3S_NODE_NAME" ]; then
             fatal "添加子节点时必须传入K3S_NODE_NAME参数"
         fi
 
-        if [[ "$K3S_NODE_NAME" == server* ]]; then
-            k3sInstallServer
-        elif [[ "$K3S_NODE_NAME" == agent* ]]; then
-            k3sInstallAgent
-        else
-            fatal "K3S_NODE_NAME必须包含server或agent关键字，当前值: $K3S_NODE_NAME"
-        fi
+        case "$K3S_NODE_NAME" in
+            server*)
+                k3sInstallServer
+                ;;
+            agent*)
+                k3sInstallAgent
+                ;;
+            *)
+                fatal "K3S_NODE_NAME必须包含server或agent关键字，当前值: $K3S_NODE_NAME"
+                ;;
+        esac
 
         tips "=================================================================="
         tips "公网IP: $(publicNetworkIp)"
