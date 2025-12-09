@@ -317,10 +317,11 @@ installHelmCharts() {
 }
 
 # 安装K3S
-k3sInstall() {
+k3sInstallServer() {
     info "current server's public network ip: $(publicNetworkIp)"
+    local node_name=${K3S_NODE_NAME:-"server1"}
     curl -sfL https://rancher-mirror.cdn.w7.cc/k3s/k3s-install.sh | \
-    K3S_NODE_NAME=server1 K3S_KUBECONFIG_MODE='644' INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true INSTALL_K3S_MIRROR=cn INSTALL_K3S_MIRROR_URL=rancher-mirror.cdn.w7.cc \
+    K3S_NODE_NAME=${node_name} K3S_KUBECONFIG_MODE='644' INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true INSTALL_K3S_MIRROR=cn INSTALL_K3S_MIRROR_URL=rancher-mirror.cdn.w7.cc \
     sh -s - --write-kubeconfig-mode 644 \
         --tls-san "$(internalIP)" \
         --kubelet-arg="image-gc-high-threshold=70" \
@@ -759,9 +760,25 @@ main() {
     checkMultipathAndBlacklist
 
     if [ -n "$K3S_URL" ]; then
-        k3sInstallAgent
+        if [[ -z "$K3S_NODE_NAME" ]]; then
+            fatal "添加子节点时必须传入K3S_NODE_NAME参数"
+        fi
+
+        if [[ "$K3S_NODE_NAME" == server* ]]; then
+            k3sInstallServer
+        elif [[ "$K3S_NODE_NAME" == agent* ]]; then
+            k3sInstallAgent
+        else
+            fatal "K3S_NODE_NAME必须包含server或agent关键字，当前值: $K3S_NODE_NAME"
+        fi
+
+        tips "=================================================================="
+        tips "公网IP: $(publicNetworkIp)"
+        tips "内网IP: $(internalIP)"
+        tips "微擎面板添加节点成功！"
+        tips "=================================================================="
     else
-        k3sInstall
+        k3sInstallServer
         downloadResource
         importImages
         installHelmCharts
