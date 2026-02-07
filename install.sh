@@ -317,16 +317,34 @@ installHelmCharts() {
 }
 
 # 安装K3S
+_setup_k3s_env() {
+    export INSTALL_K3S_SKIP_SELINUX_RPM=true
+    export INSTALL_K3S_SELINUX_WARN=true
+    export INSTALL_K3S_MIRROR=cn
+    export INSTALL_K3S_MIRROR_URL=rancher-mirror.cdn.w7.cc
+}
+
 k3sInstallServer() {
     info "current server's public network ip: $(publicNetworkIp)"
-    local node_name=${K3S_NODE_NAME:-"server1"}
+
+    # 初始化公共变量
+    _setup_k3s_env
+
+    # Server 特有变量
+    export K3S_NODE_NAME="${K3S_NODE_NAME:-server1}"
+    export K3S_KUBECONFIG_MODE="644"
+
+    # HA模式追加变量
+    if [ -n "$K3S_URL" ] && [ -n "$K3S_TOKEN" ]; then
+        export K3S_URL="$K3S_URL"
+        export K3S_TOKEN="$K3S_TOKEN"
+    fi
+
     curl -sfL https://rancher-mirror.cdn.w7.cc/k3s/k3s-install.sh | \
-    K3S_NODE_NAME=${node_name} K3S_KUBECONFIG_MODE='644' INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true INSTALL_K3S_MIRROR=cn INSTALL_K3S_MIRROR_URL=rancher-mirror.cdn.w7.cc \
-    sh -s - --write-kubeconfig-mode 644 \
+    sh -s - server \
         --tls-san "$(internalIP)" \
         --kubelet-arg="image-gc-high-threshold=70" \
         --kubelet-arg="image-gc-low-threshold=60" \
-        --node-label "w7.public-ip=$(publicNetworkIp)" \
         --embedded-registry \
         --flannel-backend "none" \
         --disable-network-policy \
@@ -335,10 +353,19 @@ k3sInstallServer() {
 }
 
 k3sInstallAgent() {
-   info "current server's public network ip: $(publicNetworkIp)"
-   curl -sfL https://rancher-mirror.rancher.cn/k3s/k3s-install.sh | \
-   K3S_URL=${K3S_URL} K3S_TOKEN=${K3S_TOKEN} INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_SELINUX_WARN=true INSTALL_K3S_MIRROR=cn INSTALL_K3S_MIRROR_URL=rancher-mirror.cdn.w7.cc \
-   sh -s - --node-label "w7.public-ip=$(publicNetworkIp)"
+    info "current server's public network ip: $(publicNetworkIp)"
+
+    # 初始化公共变量
+    _setup_k3s_env
+
+    # HA模式追加变量
+    if [ -n "$K3S_URL" ] && [ -n "$K3S_TOKEN" ]; then
+        export K3S_URL="$K3S_URL"
+        export K3S_TOKEN="$K3S_TOKEN"
+    fi
+
+    curl -sfL https://rancher-mirror.rancher.cn/k3s/k3s-install.sh | \
+    sh -s - agent
 }
 
 # 启动服务管理
